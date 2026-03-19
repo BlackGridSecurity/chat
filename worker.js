@@ -17,7 +17,11 @@ export default {
 
     // Serve the chat UI for all other requests
     return new Response(HTML, {
-      headers: { "Content-Type": "text/html;charset=UTF-8" },
+      headers: {
+        "Content-Type": "text/html;charset=UTF-8",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+      },
     });
   },
 };
