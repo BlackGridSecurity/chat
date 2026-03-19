@@ -89,12 +89,18 @@ export class ChatRoom {
     const session = this.sessions.get(ws);
     this.sessions.delete(ws);
     if (session) {
-      this.broadcast(null, {
-        type: "system",
-        text: `${session.name} left the room`,
-        ts: Date.now(),
-      });
-      this.broadcastUserList();
+      if (this.sessions.size === 0) {
+        // Last person left — wipe everything, leave no trace
+        this.messageHistory = [];
+        await this.state.storage.deleteAll();
+      } else {
+        this.broadcast(null, {
+          type: "system",
+          text: `${session.name} left the room`,
+          ts: Date.now(),
+        });
+        this.broadcastUserList();
+      }
     }
   }
 
@@ -523,18 +529,59 @@ const HTML = `<!DOCTYPE html>
 </div>
 
 <script>
-  let ws, myName, currentRoom;
+  let ws, myName, currentRoom, cryptoKey;
 
   const $ = id => document.getElementById(id);
 
   // ── Check if arriving via invite link ──
   const params = new URLSearchParams(location.search);
   const inviteRoom = params.get('r');
+  // Key lives in the fragment — never sent to server
+  const hashParams = new URLSearchParams(location.hash.slice(1));
+  const inviteKey = hashParams.get('k');
 
-  if (inviteRoom) {
+  if (inviteRoom && inviteKey) {
     $('lobby-create').style.display = 'none';
     $('lobby-join').style.display = 'flex';
     $('nick-join').focus();
+  }
+
+  // ── Crypto helpers ──
+  async function generateKey() {
+    return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  }
+
+  async function exportKey(key) {
+    const raw = await crypto.subtle.exportKey('raw', key);
+    return btoa(String.fromCharCode(...new Uint8Array(raw)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  }
+
+  async function importKey(b64) {
+    const raw = Uint8Array.from(atob(b64.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+    return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  }
+
+  async function encrypt(text) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = new TextEncoder();
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, enc.encode(text));
+    const combined = new Uint8Array(12 + ciphertext.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(ciphertext), 12);
+    return btoa(String.fromCharCode(...combined)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  }
+
+  async function decrypt(b64) {
+    try {
+      const combined = Uint8Array.from(atob(b64.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+      const iv = combined.slice(0, 12);
+      const ciphertext = combined.slice(12);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext);
+      return new TextDecoder().decode(plain);
+    } catch {
+      return '[encrypted message]';
+    }
   }
 
   // ── Create room ──
@@ -542,13 +589,15 @@ const HTML = `<!DOCTYPE html>
   $('nick-create').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); createRoom(); } };
 
   function getNick(id) {
-    return ($( id).innerText || '').trim().slice(0, 30) || 'Anonymous';
+    return ($(id).innerText || '').trim().slice(0, 30) || 'Anonymous';
   }
 
-  function createRoom() {
+  async function createRoom() {
     const nick = getNick('nick-create');
     const roomId = generateId();
-    const inviteLink = \`\${location.origin}?r=\${roomId}\`;
+    cryptoKey = await generateKey();
+    const keyStr = await exportKey(cryptoKey);
+    const inviteLink = \`\${location.origin}?r=\${roomId}#k=\${keyStr}\`;
     $('invite-url').textContent = inviteLink;
     $('invite-modal').style.display = 'flex';
     $('copy-btn').onclick = () => {
@@ -567,14 +616,16 @@ const HTML = `<!DOCTYPE html>
   $('join-btn').onclick = joinRoom;
   $('nick-join').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); joinRoom(); } };
 
-  function joinRoom() {
+  async function joinRoom() {
     const nick = getNick('nick-join');
+    cryptoKey = await importKey(inviteKey);
     startChat(nick, inviteRoom);
   }
 
   // ── Invite again button in header ──
-  $('invite-again-btn').onclick = () => {
-    const inviteLink = \`\${location.origin}?r=\${currentRoom}\`;
+  $('invite-again-btn').onclick = async () => {
+    const keyStr = await exportKey(cryptoKey);
+    const inviteLink = \`\${location.origin}?r=\${currentRoom}#k=\${keyStr}\`;
     navigator.clipboard.writeText(inviteLink).then(() => {
       $('invite-again-btn').textContent = '✓ Copied!';
       setTimeout(() => $('invite-again-btn').textContent = '🔗 Invite', 2000);
@@ -587,7 +638,6 @@ const HTML = `<!DOCTYPE html>
     $('lobby-create').style.display = 'none';
     $('lobby-join').style.display = 'none';
     $('app').style.display = 'grid';
-    // Update URL so refreshing stays in the same room
     history.replaceState(null, '', '?r=' + room);
     connect(nick, room);
   }
@@ -597,19 +647,24 @@ const HTML = `<!DOCTYPE html>
     const url = \`\${proto}://\${location.host}?room=\${encodeURIComponent(room)}&nick=\${encodeURIComponent(nick)}\`;
     ws = new WebSocket(url);
 
-    ws.onopen = () => $('status').textContent = 'connected';
+    ws.onopen = () => $('status').textContent = '🔒 e2e encrypted';
     ws.onclose = () => {
       $('status').textContent = 'disconnected — retrying…';
       setTimeout(() => connect(nick, room), 3000);
     };
     ws.onerror = () => ws.close();
 
-    ws.onmessage = ({ data }) => {
+    ws.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
-      if (msg.type === 'history') msg.messages.forEach(renderMsg);
-      else if (msg.type === 'chat') renderMsg(msg);
-      else if (msg.type === 'system') renderSystem(msg.text);
-      else if (msg.type === 'users') renderUsers(msg.users);
+      if (msg.type === 'history') {
+        for (const m of msg.messages) await renderMsg(m);
+      } else if (msg.type === 'chat') {
+        await renderMsg(msg);
+      } else if (msg.type === 'system') {
+        renderSystem(msg.text);
+      } else if (msg.type === 'users') {
+        renderUsers(msg.users);
+      }
       scrollBottom();
     };
   }
@@ -620,7 +675,7 @@ const HTML = `<!DOCTYPE html>
     );
   }
 
-  function renderMsg(msg) {
+  async function renderMsg(msg) {
     const isOwn = msg.from === myName;
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrap' + (isOwn ? ' own' : '');
@@ -632,7 +687,7 @@ const HTML = `<!DOCTYPE html>
     }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.textContent = msg.text;
+    bubble.textContent = await decrypt(msg.text);
     wrap.appendChild(bubble);
     $('messages').appendChild(wrap);
   }
@@ -660,10 +715,11 @@ const HTML = `<!DOCTYPE html>
   };
   $('send-btn').onclick = sendMsg;
 
-  function sendMsg() {
+  async function sendMsg() {
     const text = $('msg-input').value.trim();
     if (!text || !ws || ws.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: 'chat', text }));
+    const ciphertext = await encrypt(text);
+    ws.send(JSON.stringify({ type: 'chat', text: ciphertext }));
     $('msg-input').value = '';
   }
 
