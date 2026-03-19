@@ -585,7 +585,7 @@ const HTML = `<!DOCTYPE html>
   }
 
   // ── Create room ──
-  $('create-btn').onclick = createRoom;
+  $('create-btn').onclick = () => createRoom();
   $('nick-create').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); createRoom(); } };
 
   function getNick(id) {
@@ -593,23 +593,27 @@ const HTML = `<!DOCTYPE html>
   }
 
   async function createRoom() {
-    const nick = getNick('nick-create');
-    const roomId = generateId();
-    cryptoKey = await generateKey();
-    const keyStr = await exportKey(cryptoKey);
-    const inviteLink = \`\${location.origin}?r=\${roomId}#k=\${keyStr}\`;
-    $('invite-url').textContent = inviteLink;
-    $('invite-modal').style.display = 'flex';
-    $('copy-btn').onclick = () => {
-      navigator.clipboard.writeText(inviteLink).then(() => {
-        $('copy-btn').textContent = 'Copied!';
-        setTimeout(() => $('copy-btn').textContent = 'Copy link', 2000);
-      });
-    };
-    $('enter-btn').onclick = () => {
-      $('invite-modal').style.display = 'none';
-      startChat(nick, roomId);
-    };
+    try {
+      const nick = getNick('nick-create');
+      const roomId = generateId();
+      cryptoKey = await generateKey();
+      const keyStr = await exportKey(cryptoKey);
+      const inviteLink = \`\${location.origin}?r=\${roomId}#k=\${keyStr}\`;
+      $('invite-url').textContent = inviteLink;
+      $('invite-modal').style.display = 'flex';
+      $('copy-btn').onclick = () => {
+        navigator.clipboard.writeText(inviteLink).then(() => {
+          $('copy-btn').textContent = 'Copied!';
+          setTimeout(() => $('copy-btn').textContent = 'Copy link', 2000);
+        });
+      };
+      $('enter-btn').onclick = () => {
+        $('invite-modal').style.display = 'none';
+        startChat(nick, roomId);
+      };
+    } catch(err) {
+      alert('Error creating room: ' + err.message);
+    }
   }
 
   // ── Join room via invite link ──
