@@ -1,4 +1,4 @@
-name = "chat-app"
+name = "chatapplet"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
@@ -8,4 +8,4 @@ class_name = "ChatRoom"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["ChatRoom"]
+new_sqlite_classes = ["ChatRoom"]
