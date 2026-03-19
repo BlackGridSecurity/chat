@@ -367,7 +367,7 @@ const HTML = `<!DOCTYPE html>
     <p>Ephemeral, real-time chat. No accounts. No logs beyond 50 messages.</p>
     <div class="field">
       <label>Your name</label>
-      <input id="nick-input" maxlength="30" placeholder="e.g. alice" autocomplete="off">
+      <input id="nick-input" maxlength="30" placeholder="e.g. alice" autocomplete="off" autofocus>
     </div>
     <div class="field">
       <label>Room name</label>
@@ -501,6 +501,9 @@ const HTML = `<!DOCTYPE html>
   function timeStr(ts) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
+  window.addEventListener('load', () => {
+    document.getElementById('nick-input').focus();
+  });
 </script>
 </body>
 </html>`;
