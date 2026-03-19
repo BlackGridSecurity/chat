@@ -551,14 +551,27 @@ const HTML = `<!DOCTYPE html>
     return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
   }
 
+  function bufToB64(buf) {
+    const bytes = new Uint8Array(buf);
+    let str = '';
+    for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
+    return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  }
+
+  function b64ToBuf(b64) {
+    const str = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+    const buf = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) buf[i] = str.charCodeAt(i);
+    return buf;
+  }
+
   async function exportKey(key) {
     const raw = await crypto.subtle.exportKey('raw', key);
-    return btoa(String.fromCharCode(...new Uint8Array(raw)))
-      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+    return bufToB64(raw);
   }
 
   async function importKey(b64) {
-    const raw = Uint8Array.from(atob(b64.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+    const raw = b64ToBuf(b64);
     return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
   }
 
@@ -569,12 +582,12 @@ const HTML = `<!DOCTYPE html>
     const combined = new Uint8Array(12 + ciphertext.byteLength);
     combined.set(iv, 0);
     combined.set(new Uint8Array(ciphertext), 12);
-    return btoa(String.fromCharCode(...combined)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+    return bufToB64(combined);
   }
 
   async function decrypt(b64) {
     try {
-      const combined = Uint8Array.from(atob(b64.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+      const combined = b64ToBuf(b64);
       const iv = combined.slice(0, 12);
       const ciphertext = combined.slice(12);
       const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext);
