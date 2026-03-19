@@ -137,8 +137,7 @@ const HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Chat</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -151,8 +150,8 @@ const HTML = `<!DOCTYPE html>
     --accent: #7c6af7;
     --accent2: #f7a06a;
     --radius: 10px;
-    --font-ui: 'Syne', sans-serif;
-    --font-mono: 'DM Mono', monospace;
+    --font-ui: system-ui, -apple-system, sans-serif;
+    --font-mono: ui-monospace, monospace;
   }
 
   html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
@@ -198,6 +197,11 @@ const HTML = `<!DOCTYPE html>
     padding: 12px 14px;
     outline: none;
     transition: border-color 0.15s;
+    position: relative;
+    z-index: 20;
+    pointer-events: all;
+    -webkit-user-select: text;
+    user-select: text;
   }
   .field input:focus { border-color: var(--accent); }
   .btn {
@@ -369,11 +373,11 @@ const HTML = `<!DOCTYPE html>
     <p>Ephemeral, real-time chat. No accounts. No logs beyond 50 messages.</p>
     <div class="field">
       <label>Your name</label>
-      <input id="nick-input" maxlength="30" placeholder="e.g. alice" autocomplete="off">
+      <input id="nick-input" maxlength="30" placeholder="e.g. alice" autocomplete="off" autofocus onclick="this.focus()">
     </div>
     <div class="field">
       <label>Room name</label>
-      <input id="room-input" maxlength="40" value="general" autocomplete="off">
+      <input id="room-input" maxlength="40" value="general" autocomplete="off" onclick="this.focus()">
     </div>
     <button class="btn" id="join-btn">Join room →</button>
   </div>
