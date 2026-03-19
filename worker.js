@@ -560,11 +560,11 @@ const HTML = `<!DOCTYPE html>
     const bytes = new Uint8Array(buf);
     let str = '';
     for (let i = 0; i < bytes.length; i++) str += String.fromCharCode(bytes[i]);
-    return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+    return btoa(str).split('+').join('-').split('/').join('_').split('=').join('');
   }
 
   function b64ToBuf(b64) {
-    const str = atob(b64.replace(/-/g,'+').replace(/_/g,'/'));
+    const str = atob(b64.split('-').join('+').split('_').join('/'));
     const buf = new Uint8Array(str.length);
     for (let i = 0; i < str.length; i++) buf[i] = str.charCodeAt(i);
     return buf;
@@ -744,7 +744,7 @@ const HTML = `<!DOCTYPE html>
   }
 
   function esc(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return s.split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;');
   }
   function timeStr(ts) {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
