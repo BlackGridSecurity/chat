@@ -195,6 +195,27 @@ const HTML = `<!DOCTYPE html>
     user-select: text;
   }
   .field input:focus { border-color: var(--accent); }
+  .fake-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    padding: 12px 14px;
+    outline: none;
+    transition: border-color 0.15s;
+    cursor: text;
+    min-height: 44px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .fake-input:focus { border-color: var(--accent); }
+  .fake-input:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted);
+    pointer-events: none;
+  }
   .btn {
     background: var(--accent);
     color: #fff;
@@ -446,7 +467,7 @@ const HTML = `<!DOCTYPE html>
     <p>Private invite-only rooms. Share the link — only people with it can join.</p>
     <div class="field">
       <label>Your name</label>
-      <input id="nick-create" maxlength="30" placeholder="e.g. alice" autocomplete="off" autofocus onclick="this.focus()">
+      <div id="nick-create" class="fake-input" contenteditable="true" role="textbox" aria-label="Your name" spellcheck="false" data-placeholder="e.g. alice"></div>
     </div>
     <button class="btn" id="create-btn">Create new room →</button>
     <div class="divider">or join with a link</div>
@@ -460,7 +481,7 @@ const HTML = `<!DOCTYPE html>
     <p>You've been invited to a private room.</p>
     <div class="field">
       <label>Your name</label>
-      <input id="nick-join" maxlength="30" placeholder="e.g. alice" autocomplete="off" autofocus onclick="this.focus()">
+      <div id="nick-join" class="fake-input" contenteditable="true" role="textbox" aria-label="Your name" spellcheck="false" data-placeholder="e.g. alice"></div>
     </div>
     <button class="btn" id="join-btn">Join room →</button>
   </div>
@@ -518,10 +539,14 @@ const HTML = `<!DOCTYPE html>
 
   // ── Create room ──
   $('create-btn').onclick = createRoom;
-  $('nick-create').onkeydown = e => e.key === 'Enter' && createRoom();
+  $('nick-create').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); createRoom(); } };
+
+  function getNick(id) {
+    return ($( id).innerText || '').trim().slice(0, 30) || 'Anonymous';
+  }
 
   function createRoom() {
-    const nick = $('nick-create').value.trim() || 'Anonymous';
+    const nick = getNick('nick-create');
     const roomId = generateId();
     const inviteLink = \`\${location.origin}?r=\${roomId}\`;
     $('invite-url').textContent = inviteLink;
@@ -540,10 +565,10 @@ const HTML = `<!DOCTYPE html>
 
   // ── Join room via invite link ──
   $('join-btn').onclick = joinRoom;
-  $('nick-join').onkeydown = e => e.key === 'Enter' && joinRoom();
+  $('nick-join').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); joinRoom(); } };
 
   function joinRoom() {
-    const nick = $('nick-join').value.trim() || 'Anonymous';
+    const nick = getNick('nick-join');
     startChat(nick, inviteRoom);
   }
 
