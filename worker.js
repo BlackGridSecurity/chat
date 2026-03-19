@@ -157,15 +157,6 @@ const HTML = `<!DOCTYPE html>
   html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
 
   /* ── LOBBY ── */
-  #lobby {
-    position: fixed;
-    inset: 0;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
   .lobby-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -362,24 +353,130 @@ const HTML = `<!DOCTYPE html>
     font-weight: 600;
   }
   .user-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── LOBBY VARIANTS ── */
+  #lobby-create, #lobby-join {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .divider {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    padding-top: 4px;
+  }
+
+  /* ── INVITE MODAL ── */
+  #invite-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+  }
+  .modal-card {
+    position: relative;
+    z-index: 31;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .modal-card h2 { font-size: 1.4rem; font-weight: 800; }
+  .modal-card p { color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+  .invite-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+    word-break: break-all;
+  }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-ghost:hover { background: var(--border); }
+
+  /* ── INVITE BUTTON IN HEADER ── */
+  #invite-again-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  #invite-again-btn:hover { color: var(--text); border-color: var(--accent); }
+  #status { font-size: 0.75rem; color: var(--muted); font-family: var(--font-mono); }
 </style>
 </head>
 <body>
 
-<!-- LOBBY -->
-<div id="lobby">
+<!-- LOBBY: CREATE -->
+<div id="lobby-create">
   <div class="lobby-card">
     <h1>chat<span>.</span></h1>
-    <p>Ephemeral, real-time chat. No accounts. No logs beyond 50 messages.</p>
+    <p>Private invite-only rooms. Share the link — only people with it can join.</p>
     <div class="field">
       <label>Your name</label>
-      <input id="nick-input" maxlength="30" placeholder="e.g. alice" autocomplete="off" autofocus onclick="this.focus()">
+      <input id="nick-create" maxlength="30" placeholder="e.g. alice" autocomplete="off" autofocus onclick="this.focus()">
     </div>
+    <button class="btn" id="create-btn">Create new room →</button>
+    <div class="divider">or join with a link</div>
+  </div>
+</div>
+
+<!-- LOBBY: JOIN (shown when ?r= param present) -->
+<div id="lobby-join" style="display:none">
+  <div class="lobby-card">
+    <h1>chat<span>.</span></h1>
+    <p>You've been invited to a private room.</p>
     <div class="field">
-      <label>Room name</label>
-      <input id="room-input" maxlength="40" value="general" autocomplete="off" onclick="this.focus()">
+      <label>Your name</label>
+      <input id="nick-join" maxlength="30" placeholder="e.g. alice" autocomplete="off" autofocus onclick="this.focus()">
     </div>
     <button class="btn" id="join-btn">Join room →</button>
+  </div>
+</div>
+
+<!-- INVITE MODAL -->
+<div id="invite-modal" style="display:none">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <h2>Room created!</h2>
+    <p>Share this link with people you want to invite. Anyone with it can join.</p>
+    <div class="invite-box">
+      <span id="invite-url"></span>
+    </div>
+    <button class="btn" id="copy-btn">Copy link</button>
+    <button class="btn btn-ghost" id="enter-btn">Enter room →</button>
   </div>
 </div>
 
@@ -387,7 +484,8 @@ const HTML = `<!DOCTYPE html>
 <div id="app">
   <div id="header">
     <div class="dot"></div>
-    <div class="room-name">room: <span id="room-label"></span></div>
+    <div class="room-name">private room</div>
+    <button id="invite-again-btn" title="Get invite link">🔗 Invite</button>
     <div id="status">connecting…</div>
   </div>
   <div id="messages"></div>
@@ -404,21 +502,68 @@ const HTML = `<!DOCTYPE html>
 </div>
 
 <script>
-  let ws, myName;
+  let ws, myName, currentRoom;
 
   const $ = id => document.getElementById(id);
 
-  $('join-btn').onclick = join;
-  $('nick-input').onkeydown = e => e.key === 'Enter' && join();
-  $('room-input').onkeydown = e => e.key === 'Enter' && join();
+  // ── Check if arriving via invite link ──
+  const params = new URLSearchParams(location.search);
+  const inviteRoom = params.get('r');
 
-  function join() {
-    const nick = $('nick-input').value.trim() || 'Anonymous';
-    const room = $('room-input').value.trim() || 'general';
+  if (inviteRoom) {
+    $('lobby-create').style.display = 'none';
+    $('lobby-join').style.display = 'flex';
+    $('nick-join').focus();
+  }
+
+  // ── Create room ──
+  $('create-btn').onclick = createRoom;
+  $('nick-create').onkeydown = e => e.key === 'Enter' && createRoom();
+
+  function createRoom() {
+    const nick = $('nick-create').value.trim() || 'Anonymous';
+    const roomId = generateId();
+    const inviteLink = \`\${location.origin}?r=\${roomId}\`;
+    $('invite-url').textContent = inviteLink;
+    $('invite-modal').style.display = 'flex';
+    $('copy-btn').onclick = () => {
+      navigator.clipboard.writeText(inviteLink).then(() => {
+        $('copy-btn').textContent = 'Copied!';
+        setTimeout(() => $('copy-btn').textContent = 'Copy link', 2000);
+      });
+    };
+    $('enter-btn').onclick = () => {
+      $('invite-modal').style.display = 'none';
+      startChat(nick, roomId);
+    };
+  }
+
+  // ── Join room via invite link ──
+  $('join-btn').onclick = joinRoom;
+  $('nick-join').onkeydown = e => e.key === 'Enter' && joinRoom();
+
+  function joinRoom() {
+    const nick = $('nick-join').value.trim() || 'Anonymous';
+    startChat(nick, inviteRoom);
+  }
+
+  // ── Invite again button in header ──
+  $('invite-again-btn').onclick = () => {
+    const inviteLink = \`\${location.origin}?r=\${currentRoom}\`;
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      $('invite-again-btn').textContent = '✓ Copied!';
+      setTimeout(() => $('invite-again-btn').textContent = '🔗 Invite', 2000);
+    });
+  };
+
+  function startChat(nick, room) {
     myName = nick;
-    $('room-label').textContent = room;
-    $('lobby').style.display = 'none';
+    currentRoom = room;
+    $('lobby-create').style.display = 'none';
+    $('lobby-join').style.display = 'none';
     $('app').style.display = 'grid';
+    // Update URL so refreshing stays in the same room
+    history.replaceState(null, '', '?r=' + room);
     connect(nick, room);
   }
 
@@ -436,31 +581,30 @@ const HTML = `<!DOCTYPE html>
 
     ws.onmessage = ({ data }) => {
       const msg = JSON.parse(data);
-      if (msg.type === 'history') {
-        msg.messages.forEach(renderMsg);
-      } else if (msg.type === 'chat') {
-        renderMsg(msg);
-      } else if (msg.type === 'system') {
-        renderSystem(msg.text);
-      } else if (msg.type === 'users') {
-        renderUsers(msg.users);
-      }
+      if (msg.type === 'history') msg.messages.forEach(renderMsg);
+      else if (msg.type === 'chat') renderMsg(msg);
+      else if (msg.type === 'system') renderSystem(msg.text);
+      else if (msg.type === 'users') renderUsers(msg.users);
       scrollBottom();
     };
+  }
+
+  function generateId() {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
   }
 
   function renderMsg(msg) {
     const isOwn = msg.from === myName;
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrap' + (isOwn ? ' own' : '');
-
     if (!isOwn) {
       const meta = document.createElement('div');
       meta.className = 'msg-meta';
       meta.innerHTML = \`<span class="name" style="color:\${msg.color}">\${esc(msg.from)}</span><span>\${timeStr(msg.ts)}</span>\`;
       wrap.appendChild(meta);
     }
-
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     bubble.textContent = msg.text;
@@ -487,10 +631,7 @@ const HTML = `<!DOCTYPE html>
   }
 
   $('msg-input').onkeydown = e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMsg();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
   };
   $('send-btn').onclick = sendMsg;
 
