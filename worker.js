@@ -1,6 +1,7 @@
 // ============================================================
 //  CHAT APP — Cloudflare Worker + Durable Objects
 //  Deploy with: wrangler deploy
+//  v3 - E2EE + invite links + self-destructing rooms
 // ============================================================
 
 export default {
